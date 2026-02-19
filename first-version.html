@@ -1,0 +1,1225 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Solar Energy Simulator</title>
+    <script
+      async
+      src="https://docs.opencv.org/4.8.0/opencv.js"
+      onload="onOpenCvReady()"
+    ></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;600;700;900&family=Share+Tech+Mono&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      :root {
+        --sun: #ffd700;
+        --sun-glow: rgba(255, 200, 0, 0.4);
+        --sky1: #0a1628;
+        --sky2: #1a3a5c;
+        --sky3: #2d6a8a;
+        --green: #39ff14;
+        --red: #ff3333;
+        --amber: #ffaa00;
+        --panel: #1a2535;
+        --glass: rgba(255, 255, 255, 0.06);
+        --text: #d0e8ff;
+      }
+      body {
+        font-family: "Exo 2", sans-serif;
+        background: var(--sky1);
+        color: var(--text);
+        overflow: hidden;
+        height: 100vh;
+        position: relative;
+      }
+
+      /* Sky gradient background */
+      .sky-bg {
+        position: fixed;
+        inset: 0;
+        background: linear-gradient(
+          180deg,
+          #020d1a 0%,
+          #0a1f3d 40%,
+          #1a3a5c 70%,
+          #2d5016 100%
+        );
+        z-index: 0;
+      }
+      .stars {
+        position: fixed;
+        inset: 0;
+        z-index: 1;
+        pointer-events: none;
+      }
+      .star {
+        position: absolute;
+        background: #fff;
+        border-radius: 50%;
+        animation: twinkle 3s infinite alternate;
+      }
+      @keyframes twinkle {
+        0% {
+          opacity: 0.3;
+        }
+        100% {
+          opacity: 1;
+        }
+      }
+      .horizon-glow {
+        position: fixed;
+        bottom: 30%;
+        left: 0;
+        right: 0;
+        height: 120px;
+        background: linear-gradient(to top, rgba(45, 80, 22, 0.5), transparent);
+        z-index: 1;
+        pointer-events: none;
+      }
+
+      /* Header */
+      .header {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 50;
+        padding: 14px 28px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: rgba(2, 13, 26, 0.85);
+        border-bottom: 1px solid rgba(57, 255, 20, 0.15);
+        backdrop-filter: blur(12px);
+      }
+      .logo {
+        font-family: "Exo 2", sans-serif;
+        font-weight: 900;
+        font-size: 1.6rem;
+        letter-spacing: 2px;
+        background: linear-gradient(135deg, #ffd700, #39ff14);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+      .logo span {
+        font-weight: 300;
+        font-size: 1rem;
+        display: block;
+        color: #7ab;
+        letter-spacing: 4px;
+        -webkit-text-fill-color: #7ab;
+      }
+      .chat-wrap {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      #chatInput {
+        background: rgba(255, 255, 255, 0.07);
+        border: 1px solid rgba(57, 255, 20, 0.3);
+        border-radius: 20px;
+        padding: 10px 18px;
+        color: #d0e8ff;
+        font-family: "Exo 2", sans-serif;
+        font-size: 0.9rem;
+        width: 280px;
+        outline: none;
+        transition: 0.3s;
+      }
+      #chatInput:focus {
+        border-color: #39ff14;
+        box-shadow: 0 0 15px rgba(57, 255, 20, 0.2);
+      }
+      #chatInput::placeholder {
+        color: rgba(208, 232, 255, 0.4);
+      }
+      .ask-btn {
+        padding: 10px 22px;
+        background: linear-gradient(135deg, #39ff14, #00cc44);
+        border: none;
+        border-radius: 20px;
+        color: #020d1a;
+        font-family: "Exo 2", sans-serif;
+        font-weight: 700;
+        font-size: 0.85rem;
+        letter-spacing: 1px;
+        cursor: pointer;
+        transition: 0.3s;
+        white-space: nowrap;
+      }
+      .ask-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 20px rgba(57, 255, 20, 0.4);
+      }
+      .ask-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      /* Sky scene */
+      .sky-scene {
+        position: fixed;
+        top: 70px;
+        left: 0;
+        right: 0;
+        height: calc(55% - 70px);
+        z-index: 5;
+        overflow: hidden;
+      }
+
+      /* Sun */
+      .sun-track {
+        position: absolute;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 80%;
+        height: 100%;
+        pointer-events: none;
+      }
+      .sun {
+        position: absolute;
+        width: 70px;
+        height: 70px;
+        border-radius: 50%;
+        background: radial-gradient(
+          circle,
+          #fff7a0 0%,
+          #ffd700 40%,
+          #ff8c00 100%
+        );
+        box-shadow:
+          0 0 40px 20px rgba(255, 200, 0, 0.6),
+          0 0 80px 40px rgba(255, 150, 0, 0.3),
+          0 0 120px 60px rgba(255, 100, 0, 0.15);
+        transition: filter 0.3s;
+        transform: translate(-50%, -50%);
+      }
+      .sun.dim {
+        box-shadow: 0 0 20px 8px rgba(180, 140, 0, 0.3);
+        filter: brightness(0.5) saturate(0.5);
+      }
+      .sun-ray {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 100%;
+        height: 2px;
+        transform-origin: 0 0;
+        background: linear-gradient(
+          to right,
+          transparent,
+          rgba(255, 220, 0, 0.15),
+          transparent
+        );
+        pointer-events: none;
+      }
+
+      /* Ground / Panel area */
+      .ground {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 45%;
+        z-index: 6;
+        background: linear-gradient(180deg, #1a3a0a 0%, #0f2008 100%);
+      }
+      .ground-top {
+        position: fixed;
+        bottom: 44.5%;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: linear-gradient(
+          to right,
+          transparent,
+          #2a5a10,
+          #39ff14 50%,
+          #2a5a10,
+          transparent
+        );
+        z-index: 7;
+        box-shadow: 0 0 20px rgba(57, 255, 20, 0.3);
+      }
+
+      /* Solar Panel */
+      .panel-section {
+        position: fixed;
+        bottom: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 20;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+      }
+      .panel-frame {
+        background: #0a1020;
+        border: 2px solid rgba(57, 255, 20, 0.25);
+        border-radius: 8px;
+        padding: 8px;
+        box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+      }
+      .panel-grid {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 3px;
+        width: 180px;
+      }
+      .panel-cell {
+        height: 22px;
+        border-radius: 2px;
+        background: linear-gradient(135deg, #1a3060, #0d1e40);
+        border: 1px solid rgba(100, 150, 255, 0.2);
+        transition:
+          background 0.3s,
+          box-shadow 0.3s;
+        position: relative;
+        overflow: hidden;
+      }
+      .panel-cell::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+          135deg,
+          rgba(255, 255, 255, 0.05),
+          transparent
+        );
+      }
+      .panel-cell.lit {
+        background: linear-gradient(135deg, #2040a0, #4080ff);
+        box-shadow: 0 0 6px rgba(100, 150, 255, 0.5);
+      }
+      .panel-cell.bright {
+        background: linear-gradient(135deg, #60a0ff, #a0c8ff);
+        box-shadow: 0 0 8px rgba(150, 200, 255, 0.7);
+      }
+      .panel-label {
+        font-family: "Share Tech Mono", monospace;
+        font-size: 0.75rem;
+        color: #7ab;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+      }
+      .panel-stand {
+        width: 4px;
+        height: 40px;
+        background: linear-gradient(to bottom, #334, #556);
+        margin: 0 auto;
+        border-radius: 2px;
+      }
+      .panel-base {
+        width: 60px;
+        height: 6px;
+        background: #334;
+        border-radius: 3px;
+      }
+
+      /* Stats panel */
+      .stats {
+        position: fixed;
+        right: 20px;
+        top: 50%;
+        transform: translateY(-50%);
+        z-index: 30;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        width: 200px;
+      }
+      .stat-card {
+        background: rgba(2, 13, 26, 0.9);
+        border: 1px solid rgba(57, 255, 20, 0.2);
+        border-radius: 12px;
+        padding: 14px;
+        backdrop-filter: blur(10px);
+      }
+      .stat-title {
+        font-size: 0.7rem;
+        letter-spacing: 2px;
+        color: #7ab;
+        text-transform: uppercase;
+        margin-bottom: 8px;
+        font-family: "Share Tech Mono", monospace;
+      }
+      .stat-val {
+        font-family: "Share Tech Mono", monospace;
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: #ffd700;
+      }
+      .stat-val.green {
+        color: #39ff14;
+      }
+      .stat-val.red {
+        color: #ff3333;
+      }
+
+      /* Battery */
+      .battery-wrap {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .battery-body {
+        flex: 1;
+        height: 22px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-radius: 4px;
+        position: relative;
+        overflow: hidden;
+      }
+      .battery-body::after {
+        content: "";
+        position: absolute;
+        right: -6px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 5px;
+        height: 12px;
+        background: rgba(255, 255, 255, 0.3);
+        border-radius: 0 2px 2px 0;
+      }
+      .battery-fill {
+        height: 100%;
+        border-radius: 2px;
+        transition:
+          width 0.5s,
+          background 0.5s;
+      }
+      .battery-pct {
+        font-family: "Share Tech Mono", monospace;
+        font-size: 0.85rem;
+        min-width: 40px;
+        text-align: right;
+      }
+
+      /* LED Control */
+      .led-control {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .led-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .led-indicator {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        transition: all 0.3s;
+        box-shadow: none;
+      }
+      .led-indicator.on {
+        background: #39ff14;
+        box-shadow:
+          0 0 10px #39ff14,
+          0 0 20px rgba(57, 255, 20, 0.5);
+      }
+      .led-indicator.off {
+        background: #1a2a1a;
+        border: 1px solid #333;
+      }
+      .toggle-btn {
+        padding: 6px 14px;
+        border-radius: 20px;
+        border: 1px solid rgba(57, 255, 20, 0.4);
+        background: rgba(57, 255, 20, 0.1);
+        color: #39ff14;
+        font-family: "Share Tech Mono", monospace;
+        font-size: 0.75rem;
+        cursor: pointer;
+        transition: 0.3s;
+        letter-spacing: 1px;
+      }
+      .toggle-btn:hover {
+        background: rgba(57, 255, 20, 0.2);
+        box-shadow: 0 0 10px rgba(57, 255, 20, 0.2);
+      }
+      .toggle-btn.on {
+        background: rgba(57, 255, 20, 0.25);
+        border-color: #39ff14;
+      }
+      .power-drain {
+        font-size: 0.65rem;
+        color: #7ab;
+        font-family: "Share Tech Mono", monospace;
+      }
+
+      /* Angle indicator */
+      .angle-display {
+        font-family: "Share Tech Mono", monospace;
+        font-size: 2rem;
+        font-weight: 700;
+        color: #ffd700;
+        text-shadow: 0 0 20px rgba(255, 200, 0, 0.5);
+      }
+
+      /* Camera (hidden, used for CV) */
+      #camVideo {
+        position: fixed;
+        bottom: 5px;
+        left: 5px;
+        width: 160px;
+        height: 120px;
+        border-radius: 8px;
+        border: 1px solid rgba(57, 255, 20, 0.3);
+        z-index: 40;
+        transform: scaleX(-1);
+        opacity: 0.7;
+        object-fit: cover;
+        display: none;
+      }
+      #cvCanvas {
+        display: none;
+      }
+      .cam-toggle {
+        position: fixed;
+        bottom: 5px;
+        left: 5px;
+        z-index: 41;
+        background: rgba(2, 13, 26, 0.8);
+        border: 1px solid rgba(57, 255, 20, 0.3);
+        border-radius: 8px;
+        padding: 6px 10px;
+        color: #7ab;
+        font-size: 0.7rem;
+        cursor: pointer;
+        font-family: "Share Tech Mono", monospace;
+      }
+
+      /* Light beam from sun to panel */
+      .light-beam {
+        position: fixed;
+        z-index: 4;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.5s;
+      }
+
+      /* Chat modal */
+      .chat-modal {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 90%;
+        max-width: 560px;
+        height: 65vh;
+        max-height: 480px;
+        background: rgba(2, 13, 26, 0.97);
+        border: 1px solid rgba(57, 255, 20, 0.3);
+        border-radius: 16px;
+        box-shadow: 0 0 60px rgba(57, 255, 20, 0.15);
+        z-index: 100;
+        display: none;
+        flex-direction: column;
+        backdrop-filter: blur(16px);
+      }
+      .chat-modal.active {
+        display: flex;
+        animation: slideIn 0.3s ease;
+      }
+      @keyframes slideIn {
+        from {
+          opacity: 0;
+          transform: translate(-50%, -55%);
+        }
+        to {
+          opacity: 1;
+          transform: translate(-50%, -50%);
+        }
+      }
+      .chat-head {
+        padding: 18px 20px;
+        border-bottom: 1px solid rgba(57, 255, 20, 0.15);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .chat-title-text {
+        font-family: "Exo 2", sans-serif;
+        font-weight: 700;
+        font-size: 1.2rem;
+        color: #39ff14;
+        letter-spacing: 2px;
+      }
+      .close-btn {
+        background: #ff3333;
+        border: none;
+        border-radius: 50%;
+        width: 30px;
+        height: 30px;
+        color: #fff;
+        cursor: pointer;
+        font-size: 1rem;
+        transition: 0.3s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .close-btn:hover {
+        transform: rotate(90deg);
+      }
+      .chat-msgs {
+        flex: 1;
+        padding: 16px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .chat-msgs::-webkit-scrollbar {
+        width: 6px;
+      }
+      .chat-msgs::-webkit-scrollbar-thumb {
+        background: #39ff14;
+        border-radius: 3px;
+      }
+      .msg {
+        padding: 10px 16px;
+        border-radius: 12px;
+        max-width: 82%;
+        word-wrap: break-word;
+        font-size: 0.9rem;
+        animation: msgIn 0.3s ease;
+      }
+      @keyframes msgIn {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .msg.user {
+        align-self: flex-end;
+        background: linear-gradient(135deg, #1a4a20, #0d3010);
+        border: 1px solid rgba(57, 255, 20, 0.3);
+        color: #d0e8ff;
+      }
+      .msg.ai {
+        align-self: flex-start;
+        background: rgba(255, 200, 0, 0.08);
+        border: 1px solid rgba(255, 200, 0, 0.2);
+        color: #d0e8ff;
+      }
+      .msg.err {
+        align-self: flex-start;
+        background: rgba(255, 50, 50, 0.1);
+        border: 1px solid rgba(255, 50, 50, 0.3);
+        color: #ff8888;
+      }
+      .typing {
+        align-self: flex-start;
+        padding: 10px 16px;
+        background: rgba(255, 200, 0, 0.08);
+        border: 1px solid rgba(255, 200, 0, 0.2);
+        border-radius: 12px;
+        display: flex;
+        gap: 5px;
+      }
+      .dot {
+        width: 7px;
+        height: 7px;
+        background: #ffd700;
+        border-radius: 50%;
+        animation: bounce 1.4s infinite ease-in-out;
+      }
+      .dot:nth-child(2) {
+        animation-delay: 0.2s;
+      }
+      .dot:nth-child(3) {
+        animation-delay: 0.4s;
+      }
+      @keyframes bounce {
+        0%,
+        60%,
+        100% {
+          transform: translateY(0);
+        }
+        30% {
+          transform: translateY(-8px);
+        }
+      }
+
+      /* Sun arc path indicator */
+      .arc-path {
+        position: fixed;
+        z-index: 4;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="sky-bg"></div>
+    <div class="stars" id="stars"></div>
+    <div class="horizon-glow"></div>
+
+    <!-- Camera elements (hidden) -->
+    <video id="camVideo" autoplay playsinline></video>
+    <canvas id="cvCanvas"></canvas>
+    <button class="cam-toggle" id="camToggle" onclick="toggleCamera()">
+      📷 Show Cam
+    </button>
+
+    <!-- Header -->
+    <div class="header">
+      <div class="logo">SOLAR<span>ENERGY SIM</span></div>
+      <div class="chat-wrap">
+        <input
+          type="text"
+          id="chatInput"
+          placeholder="Ask about solar energy..."
+        />
+        <button class="ask-btn" id="askBtn">Ask AI</button>
+      </div>
+    </div>
+
+    <!-- Sun arc SVG path -->
+    <svg
+      class="arc-path"
+      id="arcSvg"
+      style="
+        top: 70px;
+        left: 0;
+        right: 0;
+        width: 100%;
+        height: calc(55% - 70px);
+      "
+    >
+      <path
+        id="arcPath"
+        fill="none"
+        stroke="rgba(255,200,0,0.08)"
+        stroke-width="2"
+        stroke-dasharray="6,8"
+      />
+    </svg>
+
+    <!-- Sky scene with sun -->
+    <div class="sky-scene" id="skyScene">
+      <div class="sun" id="sun"></div>
+    </div>
+
+    <!-- Ground -->
+    <div class="ground-top"></div>
+    <div class="ground"></div>
+
+    <!-- Light beam canvas -->
+    <canvas class="light-beam" id="beamCanvas"></canvas>
+
+    <!-- Solar Panel -->
+    <div class="panel-section">
+      <div class="panel-frame">
+        <div class="panel-grid" id="panelGrid"></div>
+      </div>
+      <div class="panel-label">PHOTOVOLTAIC ARRAY</div>
+      <div class="panel-stand"></div>
+      <div class="panel-base"></div>
+    </div>
+
+    <!-- Stats Panel -->
+    <div class="stats">
+      <div class="stat-card">
+        <div class="stat-title">☀ Sun Angle</div>
+        <div class="angle-display" id="angleDisplay">90°</div>
+        <div
+          style="
+            font-size: 0.7rem;
+            color: #7ab;
+            font-family: &quot;Share Tech Mono&quot;, monospace;
+          "
+          id="trackMode"
+        >
+          AUTO TRACK
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-title">⚡ Power Output</div>
+        <div class="stat-val green" id="powerOut">0 W</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-title">🔋 Battery</div>
+        <div class="battery-wrap">
+          <div class="battery-body">
+            <div class="battery-fill" id="battFill"></div>
+          </div>
+          <div class="battery-pct" id="battPct">50%</div>
+        </div>
+        <div
+          style="
+            margin-top: 8px;
+            font-size: 0.7rem;
+            color: #7ab;
+            font-family: &quot;Share Tech Mono&quot;, monospace;
+          "
+          id="battStatus"
+        >
+          CHARGING
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-title">💡 LED Light</div>
+        <div class="led-control">
+          <div class="led-row">
+            <div class="led-indicator off" id="ledIndicator"></div>
+            <button class="toggle-btn" id="ledBtn" onclick="toggleLED()">
+              TURN ON
+            </button>
+          </div>
+          <div class="power-drain" id="drainInfo">Drain: 5W when on</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chat Modal -->
+    <div class="chat-modal" id="chatModal">
+      <div class="chat-head">
+        <div class="chat-title-text">☀ SOLAR AI ASSISTANT</div>
+        <button class="close-btn" onclick="closeChat()">×</button>
+      </div>
+      <div class="chat-msgs" id="chatMsgs"></div>
+    </div>
+
+    <script>
+      // ─── Stars ───
+      const starsEl = document.getElementById("stars");
+      for (let i = 0; i < 120; i++) {
+        const s = document.createElement("div");
+        s.className = "star";
+        s.style.cssText = `left:${Math.random() * 100}%;top:${Math.random() * 50}%;width:${Math.random() * 2 + 1}px;height:${Math.random() * 2 + 1}px;animation-delay:${Math.random() * 3}s;animation-duration:${2 + Math.random() * 3}s`;
+        starsEl.appendChild(s);
+      }
+
+      // ─── Panel Grid ───
+      const grid = document.getElementById("panelGrid");
+      for (let i = 0; i < 36; i++) {
+        const c = document.createElement("div");
+        c.className = "panel-cell";
+        c.id = `cell${i}`;
+        grid.appendChild(c);
+      }
+
+      // ─── State ───
+      let angle = 180,
+        autoAngle = 0,
+        autoDir = 1,
+        battery = 50,
+        ledOn = false,
+        torchDetected = false,
+        cvReady = false,
+        cameraStream = null,
+        cameraVisible = false;
+      const MAX_BATTERY = 100,
+        LED_DRAIN = 5,
+        PANEL_MAX = 50,
+        sunEl = document.getElementById("sun"),
+        skyScene = document.getElementById("skyScene");
+
+      // ─── Sun positioning (0=left horizon, 180=right horizon, 90=zenith) ───
+      function setSunAngle(deg) {
+        angle = Math.max(0, Math.min(180, deg));
+        const rad = (angle / 180) * Math.PI; // 0=left, π=right, peak at π/2
+        const sceneW = skyScene.offsetWidth,
+          sceneH = skyScene.offsetHeight;
+        // Arc center at bottom center, radius spans scene
+        const rx = sceneW * 0.42,
+          ry = sceneH * 0.9;
+        const cx = sceneW / 2,
+          cy = sceneH + 20;
+        // angle 0=left, 180=right, 90=top
+        const x = cx - rx * Math.cos(rad); // mirrored so 0=left
+        const y = cy - ry * Math.sin(rad);
+        sunEl.style.left = x + "px";
+        sunEl.style.top = y + "px";
+        document.getElementById("angleDisplay").textContent =
+          Math.round(angle) + "°";
+        updatePanel(angle);
+        updateBeam(x + cx * 0 - sunEl.offsetWidth / 2, y);
+        drawArcPath(cx, cy, rx, ry, sceneW, sceneH);
+      }
+
+      function drawArcPath(cx, cy, rx, ry, sw, sh) {
+        const path = document.getElementById("arcPath");
+        const pts = [];
+        for (let a = 0; a <= 180; a += 5) {
+          const r = (a / 180) * Math.PI;
+          const x = cx - rx * Math.cos(r);
+          const y = cy - ry * Math.sin(r);
+          pts.push(`${x},${y}`);
+        }
+        path.setAttribute("d", "M" + pts.join(" L"));
+      }
+
+      // ─── Panel cells lighting based on sun angle and intensity ───
+      function updatePanel(deg) {
+        const eff = Math.sin((deg / 180) * Math.PI); // 0 at horizons, 1 at zenith
+        const torchBoost = torchDetected ? 1.2 : 1;
+        const intensity = Math.min(1, eff * torchBoost);
+        const litCount = Math.round(intensity * 36);
+        const brightCount = Math.round(intensity * 18);
+        for (let i = 0; i < 36; i++) {
+          const c = document.getElementById(`cell${i}`);
+          c.className =
+            "panel-cell" +
+            (i < brightCount ? " bright" : i < litCount ? " lit" : "");
+        }
+        const power = Math.round(intensity * PANEL_MAX);
+        document.getElementById("powerOut").textContent = power + " W";
+        document.getElementById("powerOut").className =
+          "stat-val " + (power > 15 ? "green" : power > 5 ? "" : "red");
+        return power;
+      }
+
+      // ─── Battery logic ───
+      let lastTick = Date.now();
+      function tickBattery() {
+        const now = Date.now(),
+          dt = (now - lastTick) / 1000;
+        lastTick = now;
+        const eff = Math.sin((angle / 180) * Math.PI);
+        const torchBoost = torchDetected ? 1.2 : 1;
+        const inPower = eff * PANEL_MAX * torchBoost;
+        const outPower = ledOn ? LED_DRAIN : 0;
+        const net = (((inPower - outPower) * dt) / 3600) * 100; // simplified % per sec scale
+        battery = Math.max(0, Math.min(MAX_BATTERY, battery + net * 8));
+        const pct = Math.round(battery);
+        const fill = document.getElementById("battFill"),
+          pctEl = document.getElementById("battPct"),
+          statusEl = document.getElementById("battStatus");
+        fill.style.width = pct + "%";
+        const color = pct < 20 ? "#ff3333" : pct < 50 ? "#ffaa00" : "#39ff14";
+        fill.style.background = `linear-gradient(to right,${color}aa,${color})`;
+        pctEl.textContent = pct + "%";
+        pctEl.style.color = color;
+        statusEl.textContent = inPower > outPower ? "CHARGING" : "DISCHARGING";
+        statusEl.style.color = inPower > outPower ? "#39ff14" : "#ffaa00";
+        // auto-off LED if battery empty
+        if (battery <= 0 && ledOn) {
+          ledOn = false;
+          updateLEDUI();
+        }
+        // Update LED glow if on
+        if (ledOn) {
+          document.getElementById("ledIndicator").className =
+            "led-indicator on";
+        }
+      }
+      setInterval(tickBattery, 200);
+
+      // ─── LED ───
+      function toggleLED() {
+        if (!ledOn && battery < 2) {
+          alert("Not enough battery!");
+          return;
+        }
+        ledOn = !ledOn;
+        updateLEDUI();
+      }
+      function updateLEDUI() {
+        const btn = document.getElementById("ledBtn"),
+          ind = document.getElementById("ledIndicator");
+        btn.textContent = ledOn ? "TURN OFF" : "TURN ON";
+        btn.className = "toggle-btn" + (ledOn ? " on" : "");
+        ind.className = "led-indicator " + (ledOn ? "on" : "off");
+      }
+
+      // ─── Light beam canvas ───
+      const beamCanvas = document.getElementById("beamCanvas");
+      const beamCtx = beamCanvas.getContext("2d");
+      function updateBeam(sunX, sunY) {
+        beamCanvas.width = window.innerWidth;
+        beamCanvas.height = window.innerHeight;
+        beamCanvas.style.left = 0;
+        beamCanvas.style.top = 0;
+        beamCanvas.style.width = "100%";
+        beamCanvas.style.height = "100%";
+        const sceneTop = 70,
+          skyH = window.innerHeight * 0.55 - 70;
+        const absX =
+          sunX +
+          (window.innerWidth / 2) * 0 +
+          skyScene.getBoundingClientRect().left +
+          sunEl.offsetWidth / 2;
+        const absY =
+          sceneTop + parseFloat(sunEl.style.top || 0) + sunEl.offsetWidth / 2;
+        const panelX = window.innerWidth / 2,
+          panelY = window.innerHeight * 0.75;
+        const eff = Math.sin((angle / 180) * Math.PI);
+        beamCtx.clearRect(0, 0, beamCanvas.width, beamCanvas.height);
+        if (eff < 0.05) return;
+        const sx =
+          parseFloat(sunEl.style.left || 0) + sceneTop + sunEl.offsetWidth / 2;
+        const sunAbsX =
+          skyScene.getBoundingClientRect().left +
+          parseFloat(sunEl.style.left || 0) +
+          35;
+        const sunAbsY = sceneTop + parseFloat(sunEl.style.top || 0) + 35;
+        const grad = beamCtx.createLinearGradient(
+          sunAbsX,
+          sunAbsY,
+          panelX,
+          panelY,
+        );
+        grad.addColorStop(0, `rgba(255,220,0,${eff * 0.5})`);
+        grad.addColorStop(1, "rgba(255,220,0,0)");
+        beamCtx.save();
+        beamCtx.beginPath();
+        beamCtx.moveTo(sunAbsX - 15, sunAbsY);
+        beamCtx.lineTo(panelX - 30, panelY);
+        beamCtx.lineTo(panelX + 30, panelY);
+        beamCtx.lineTo(sunAbsX + 15, sunAbsY);
+        beamCtx.fillStyle = grad;
+        beamCtx.globalAlpha = 0.3;
+        beamCtx.fill();
+        beamCtx.restore();
+        beamCanvas.style.opacity = String(eff);
+      }
+
+      // ─── Auto sun movement ───
+      let autoT = 0;
+      function autoMoveSun() {
+        if (!torchDetected) {
+          autoT += 0.003;
+          const a = ((Math.sin(autoT) + 1) / 2) * 180;
+          setSunAngle(a);
+        }
+      }
+      setInterval(autoMoveSun, 16);
+
+      // ─── OpenCV + Camera ───
+      let cvModule = null;
+      function onOpenCvReady() {
+        cvModule = cv;
+        console.log("OpenCV ready");
+      }
+
+      async function startCamera() {
+        try {
+          cameraStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "environment", width: 320, height: 240 },
+          });
+          const vid = document.getElementById("camVideo");
+          vid.srcObject = cameraStream;
+          vid.onloadedmetadata = () => {
+            vid.play();
+            if (cvReady || cvModule) startCV();
+          };
+          document.getElementById("camToggle").style.display = "block";
+        } catch (e) {
+          console.log("Camera not available, using auto mode");
+        }
+      }
+
+      function startCV() {
+        const vid = document.getElementById("camVideo"),
+          cvs = document.getElementById("cvCanvas");
+        cvs.width = vid.videoWidth || 320;
+        cvs.height = vid.videoHeight || 240;
+        function processFrame() {
+          if (!cvModule) {
+            requestAnimationFrame(processFrame);
+            return;
+          }
+          try {
+            const ctx = cvs.getContext("2d");
+            ctx.drawImage(vid, 0, 0);
+            const src = cvModule.imread(cvs);
+            const hsv = new cvModule.Mat();
+            cvModule.cvtColor(src, hsv, cvModule.COLOR_RGB2HSV);
+            // Detect bright torch light: very high V, low S (white-ish bright light)
+            const low = new cvModule.Mat(
+              hsv.rows,
+              hsv.cols,
+              hsv.type(),
+              [0, 0, 240, 0],
+            );
+            const high = new cvModule.Mat(
+              hsv.rows,
+              hsv.cols,
+              hsv.type(),
+              [180, 80, 255, 255],
+            );
+            const mask = new cvModule.Mat();
+            cvModule.inRange(hsv, low, high, mask);
+            // Find contours
+            const contours = new cvModule.MatVector(),
+              hierarchy = new cvModule.Mat();
+            cvModule.findContours(
+              mask,
+              contours,
+              hierarchy,
+              cvModule.RETR_EXTERNAL,
+              cvModule.CHAIN_APPROX_SIMPLE,
+            );
+            let found = false,
+              bestX = 0.5;
+            for (let i = 0; i < contours.size(); i++) {
+              const area = cvModule.contourArea(contours.get(i));
+              if (area > 200) {
+                const m = cvModule.moments(contours.get(i));
+                if (m.m00 > 0) {
+                  bestX = 1 - m.m10 / m.m00 / cvs.width;
+                  found = true;
+                  break;
+                }
+              }
+            }
+            if (found) {
+              torchDetected = true;
+              setSunAngle(bestX * 180);
+              document.getElementById("trackMode").textContent =
+                "TORCH TRACKING";
+              document.getElementById("trackMode").style.color = "#FFD700";
+            } else {
+              torchDetected = false;
+              document.getElementById("trackMode").textContent = "AUTO TRACK";
+              document.getElementById("trackMode").style.color = "#7ab";
+            }
+            src.delete();
+            hsv.delete();
+            low.delete();
+            high.delete();
+            mask.delete();
+            contours.delete();
+            hierarchy.delete();
+          } catch (e) {}
+          requestAnimationFrame(processFrame);
+        }
+        requestAnimationFrame(processFrame);
+      }
+
+      function toggleCamera() {
+        const vid = document.getElementById("camVideo"),
+          btn = document.getElementById("camToggle");
+        if (!cameraStream) {
+          startCamera();
+          btn.textContent = "📷 Hide Cam";
+          return;
+        }
+        cameraVisible = !cameraVisible;
+        vid.style.display = cameraVisible ? "block" : "none";
+        btn.textContent = cameraVisible ? "📷 Hide Cam" : "📷 Show Cam";
+      }
+
+      // Start camera automatically
+      startCamera();
+
+      // ─── Resize ───
+      window.addEventListener("resize", () => {
+        setSunAngle(angle);
+      });
+      setTimeout(() => setSunAngle(90), 100);
+
+      // ─── Chat ───
+      let prevUser = null,
+        prevAI = null,
+        summary = "",
+        streaming = false;
+      const API = "https://nuclear-reaction.onrender.com/chat";
+
+      document.getElementById("askBtn").addEventListener("click", sendChat);
+      document.getElementById("chatInput").addEventListener("keypress", (e) => {
+        if (e.key === "Enter" && !streaming) sendChat();
+      });
+
+      async function sendChat() {
+        const msg = document.getElementById("chatInput").value.trim();
+        if (!msg || streaming) return;
+        streaming = true;
+        document.getElementById("askBtn").disabled = true;
+        document.getElementById("chatInput").value = "";
+        document.getElementById("chatModal").classList.add("active");
+        addMsg(msg, "user");
+        const typing = addTyping();
+        try {
+          const res = await fetch(API, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              user_message: msg,
+              previous_user_message: prevUser,
+              previous_ai_message: prevAI,
+              chat_summary: summary || null,
+            }),
+          });
+          typing.remove();
+          if (!res.ok) throw new Error();
+          const reader = res.body.getReader(),
+            dec = new TextDecoder();
+          let aiResp = "",
+            div = addMsg("", "ai");
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            const chunk = dec.decode(value);
+            for (const line of chunk.split("\n")) {
+              if (line.startsWith("data: ")) {
+                const d = line.slice(6);
+                if (d === "[DONE]" || d === "[ERROR]") break;
+                aiResp += d;
+                div.textContent = aiResp;
+                scrollChat();
+              }
+            }
+          }
+          prevUser = msg;
+          prevAI = aiResp;
+          summary = "Solar energy context discussed";
+        } catch (e) {
+          typing.remove();
+          addMsg(
+            "Solar panels convert sunlight into electricity via the photovoltaic effect. The sun angle greatly affects efficiency—panels are most productive when facing the sun directly (90°). Battery storage lets you use solar power at night or on cloudy days.",
+            "err",
+          );
+        } finally {
+          streaming = false;
+          document.getElementById("askBtn").disabled = false;
+          scrollChat();
+        }
+      }
+
+      function addMsg(txt, type) {
+        const d = document.createElement("div");
+        d.className = `msg ${type}`;
+        d.textContent = txt;
+        document.getElementById("chatMsgs").appendChild(d);
+        scrollChat();
+        return d;
+      }
+      function addTyping() {
+        const d = document.createElement("div");
+        d.className = "typing";
+        d.innerHTML =
+          '<div class="dot"></div><div class="dot"></div><div class="dot"></div>';
+        document.getElementById("chatMsgs").appendChild(d);
+        scrollChat();
+        return d;
+      }
+      function scrollChat() {
+        const m = document.getElementById("chatMsgs");
+        m.scrollTop = m.scrollHeight;
+      }
+      function closeChat() {
+        document.getElementById("chatModal").classList.remove("active");
+      }
+    </script>
+  </body>
+</html>
